@@ -1,0 +1,2 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+  com.dynamicpay.opp.sdk.autoconfigure.OppAutoConfiguration
