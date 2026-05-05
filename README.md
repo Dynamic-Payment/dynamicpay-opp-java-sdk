@@ -22,7 +22,7 @@ Add the JitPack repository and dependency to your `pom.xml`:
 
 <dependencies>
     <dependency>
-        <groupId>com.github.dynamicpay</groupId>
+        <groupId>com.github.Dynamic-Payment</groupId>
         <artifactId>dynamicpay-opp-java-sdk</artifactId>
         <version>1.0.0</version>
     </dependency>
@@ -32,7 +32,7 @@ Add the JitPack repository and dependency to your `pom.xml`:
 ### Option 2: Clone and Install Locally
 
 ```bash
-git clone https://github.com/dynamicpay/dynamicpay-opp-java-sdk.git
+git clone https://github.com/Dynamic-Payment/dynamicpay-opp-java-sdk.git
 cd dynamicpay-opp-java-sdk
 
 # Compile and install to local Maven repository
@@ -55,7 +55,7 @@ Then add to your project's `pom.xml`:
 
 ### Step 1: Download Your Private Key
 
-Log in to the DynamicPay merchant portal, go to **Organization > Config**, and download your private key file (`private_key_pkcs8.pem`). Store it in a secure location on your server, e.g.:
+Log in to the DynamicPay merchant portal, go to **Account Settings → API Keys**, and download your private key file (`private_key_pkcs8.pem`). Store it in a secure location on your server, e.g.:
 
 ```
 /etc/opp/private_key_pkcs8.pem
@@ -149,7 +149,7 @@ public class OrderService {
         request.setCurrency("USD");
 
         // Specify Alipay directly
-        // Supported values: alipay / wechat / unionpay / vmpay / clicktopay
+        // Supported values: alipay / wechat / unionpay / vmpay
         request.setPaymentType("alipay");
 
         request.setDescription("Order " + orderId);
@@ -165,7 +165,7 @@ public class OrderService {
         PaymentResponse response = oppClient.createPaymentUrl(request);
 
         // Generated payUrl example:
-        // https://sandbox.api.dynamicpay.com/payment
+        // https://uat-opp.dynamicg.com/payment
         //   ?orderNum=DP2024001
         //   &accessKey=eyJ...
         //   &redirectCallerUrl=https://your-domain.com/cart
@@ -208,21 +208,10 @@ public class NotifyController {
     @PostMapping("/notify")
     public ResponseEntity<String> handleNotify(@RequestBody Map<String, Object> body) {
         String orderNum = (String) body.get("orderNum");
-        String status   = (String) body.get("status");   // SUCCESS or FAILED
-        Object amount   = body.get("amount");
-        String sign     = (String) body.get("sign");
 
-        // 1. Verify signature using the platform public key
-        // 2. Validate orderNum exists and amount matches
-        // 3. Handle idempotency (the same order may be notified multiple times)
-        // 4. Update order status in your database
-
-        if ("SUCCESS".equals(status)) {
-            // Mark order as paid
-        }
-
-        // Return "success" to acknowledge receipt.
-        // If not returned, the platform will retry at intervals.
+        // The webhook is NOT signed — do not trust the body directly.
+        // Always call queryBySign with orderNum to confirm status before
+        // marking the order paid. The webhook fires at most once; there is no retry.
         return ResponseEntity.ok("success");
     }
 }
@@ -288,7 +277,8 @@ public String createInstallmentOrder(String orderId, long amountCents, String us
 | `merchantOrderNum` | String | Yes | Your unique order ID, max 32 chars |
 | `amount` | long | Yes | Amount in smallest currency unit (cents) |
 | `currency` | String | Yes | ISO 4217 currency code, e.g. `USD` |
-| `paymentType` | String | No | `alipay` / `wechat` / `unionpay` / `vmpay` / `clicktopay`. Omit to show all options |
+| `paymentType` | String | No | `alipay` / `wechat` / `unionpay` / `vmpay`. Omit to show all options. Mastercard Click to Pay is triggered automatically by merchant configuration — no value needed. |
+| `merchantCode` | String | No | Specific acquirer merchant code. Required when `extraTradeCode` is `delegated`. |
 | `description` | String | No | Order description |
 | `notifyUrl` | String | No | Server-to-server async notification URL |
 | `redirectSuccessUrl` | String | No | Redirect URL after successful payment |
@@ -297,17 +287,30 @@ public String createInstallmentOrder(String orderId, long amountCents, String us
 | `extraTradeCode` | String | No | Comma-separated business codes, e.g. `installment`, max 256 chars |
 | `extraTradeContent` | String | No | JSON map matching `extraTradeCode` keys, max 1024 chars |
 | `attach` | String | No | Custom pass-through data, returned as-is in notification callback |
+| `email` | String | No | Cardholder email. Click to Pay only. When provided with `mobile`, skips the identity page. |
+| `mobile` | String | No | Cardholder mobile number in E.164 format (e.g. `+85212345678`). Click to Pay only. |
 
 ---
 
 ## Environments
 
-| Environment | Server URL |
-|---|---|
-| Sandbox | `https://sandbox.api.dynamicpay.com` |
-| Production | `https://api.dynamicpay.com` |
+| Environment | API host | Hosted page host |
+|---|---|---|
+| Sandbox | `https://uat-opp-api.dynamicg.com` | `https://uat-opp.dynamicg.com` |
+| Production | `https://opp-api.dynamicg.com` | `https://opp.dynamicg.com` |
 
-Switch via `opp.environment: sandbox` or `opp.environment: prod` in `application.yml`.
+Switch via `opp.environment: sandbox` or `opp.environment: prod` in `application.yml`. The URLs above are built-in defaults — **no URL configuration is required** for standard deployments.
+
+For special cases (e.g. pointing at a local or staging server), you can override the defaults. **Do not set these properties unless explicitly instructed by DynamicPay technical staff.**
+
+```yaml
+opp:
+  environment: sandbox
+  sandbox-url: http://192.168.1.10:8085        # overrides sandbox API host
+  sandbox-page-url: http://192.168.1.10:3000   # overrides sandbox page host
+  prod-url: https://my-custom-prod.example.com
+  prod-page-url: https://my-custom-opp-page.example.com
+```
 
 ---
 
