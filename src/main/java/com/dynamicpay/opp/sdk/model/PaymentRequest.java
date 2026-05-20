@@ -56,6 +56,45 @@ public class PaymentRequest {
      */
     private String mobile;
 
+    /** Cardholder first name. Optional. Used to pre-fill cardholder name in Click to Pay. Max 100 characters. */
+    private String firstName;
+
+    /** Cardholder last name. Optional. Used to pre-fill cardholder name in Click to Pay. Max 100 characters. */
+    private String lastName;
+
+    /**
+     * Mobile phone country dialing code. Optional.
+     * e.g. "852" (Hong Kong), "61" (Australia), "1" (US/Canada).
+     * Used as mobileNumber.countryCode in Click to Pay SDK calls.
+     */
+    private String mobileCountryCode;
+
+    /**
+     * Service access type. Optional.
+     * Allowed values: "opp" (default) / "billpay".
+     * If omitted, null, or empty string, the server normalizes it to "opp".
+     * - "opp"     — default OPP channel; server performs permissionOppCode check
+     *               and uses serviceAccess bitmask for merchant permission.
+     * - "billpay" — BillPay channel; server skips permissionOppCode check
+     *               and uses billpayServiceAccess bitmask for merchant permission.
+     */
+    private String applyServiceAccessType;
+
+    /**
+     * Company / organization display name.
+     * REQUIRED when applyServiceAccessType is "billpay" — used as orgName for the order
+     * (server returns error 1037 "companyName is required" if missing in billpay mode).
+     * Ignored for the default OPP channel, where orgName is taken from the server-side
+     * organization record via companyId lookup.
+     */
+    private String companyName;
+
+    /**
+     * Whether to include additional 3DS data on this transaction.
+     * 1 = include additional 3DS data, 0 / null = standard (default). Optional.
+     */
+    private Integer isAdditional3DSData;
+
     /** URL to redirect when the user clicks Back or Cancel on the payment page. Optional. */
     private String redirectCallerUrl;
 
@@ -101,6 +140,24 @@ public class PaymentRequest {
     public String getMobile() { return mobile; }
     public void setMobile(String mobile) { this.mobile = mobile; }
 
+    public String getFirstName() { return firstName; }
+    public void setFirstName(String firstName) { this.firstName = firstName; }
+
+    public String getLastName() { return lastName; }
+    public void setLastName(String lastName) { this.lastName = lastName; }
+
+    public String getMobileCountryCode() { return mobileCountryCode; }
+    public void setMobileCountryCode(String mobileCountryCode) { this.mobileCountryCode = mobileCountryCode; }
+
+    public String getApplyServiceAccessType() { return applyServiceAccessType; }
+    public void setApplyServiceAccessType(String applyServiceAccessType) { this.applyServiceAccessType = applyServiceAccessType; }
+
+    public String getCompanyName() { return companyName; }
+    public void setCompanyName(String companyName) { this.companyName = companyName; }
+
+    public Integer getIsAdditional3DSData() { return isAdditional3DSData; }
+    public void setIsAdditional3DSData(Integer isAdditional3DSData) { this.isAdditional3DSData = isAdditional3DSData; }
+
     public String getRedirectCallerUrl() { return redirectCallerUrl; }
     public void setRedirectCallerUrl(String redirectCallerUrl) { this.redirectCallerUrl = redirectCallerUrl; }
 
@@ -109,4 +166,5 @@ public class PaymentRequest {
 
     public String getRedirectErrorUrl() { return redirectErrorUrl; }
     public void setRedirectErrorUrl(String redirectErrorUrl) { this.redirectErrorUrl = redirectErrorUrl; }
+
 }

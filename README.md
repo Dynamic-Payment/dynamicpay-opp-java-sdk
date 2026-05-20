@@ -24,7 +24,7 @@ Add the JitPack repository and dependency to your `pom.xml`:
     <dependency>
         <groupId>com.github.Dynamic-Payment</groupId>
         <artifactId>dynamicpay-opp-java-sdk</artifactId>
-        <version>1.0.0</version>
+        <version>1.1.0</version>
     </dependency>
 </dependencies>
 ```
@@ -45,7 +45,7 @@ Then add to your project's `pom.xml`:
 <dependency>
     <groupId>com.dynamicpay.opp</groupId>
     <artifactId>dynamicpay-opp-java-sdk</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 
@@ -281,14 +281,18 @@ public String createInstallmentOrder(String orderId, long amountCents, String us
 | `merchantCode` | String | No | Specific acquirer merchant code. Required when `extraTradeCode` is `delegated`. |
 | `description` | String | No | Order description |
 | `notifyUrl` | String | No | Server-to-server async notification URL |
-| `redirectSuccessUrl` | String | No | Redirect URL after successful payment |
-| `redirectErrorUrl` | String | No | Redirect URL after failed payment |
-| `redirectCallerUrl` | String | No | Redirect URL when user clicks Back / Cancel |
+| `redirectSuccessUrl` | String | No | Browser redirect URL after successful payment (appended to `payUrl` as query parameter) |
+| `redirectErrorUrl` | String | No | Browser redirect URL after failed payment (appended to `payUrl` as query parameter) |
+| `redirectCallerUrl` | String | No | Browser redirect URL when user clicks Back / Cancel (appended to `payUrl` as query parameter) |
 | `extraTradeCode` | String | No | Comma-separated business codes, e.g. `installment`, max 256 chars |
 | `extraTradeContent` | String | No | JSON map matching `extraTradeCode` keys, max 1024 chars |
 | `attach` | String | No | Custom pass-through data, returned as-is in notification callback |
 | `email` | String | No | Cardholder email. Click to Pay only. When provided with `mobile`, skips the identity page. |
 | `mobile` | String | No | Cardholder mobile number in E.164 format (e.g. `+85212345678`). Click to Pay only. |
+| `mobileCountryCode` | String | No | Mobile country dialing code, e.g. `852` (HK), `61` (AU), `1` (US/CA). Click to Pay only. |
+| `firstName` | String | No | Cardholder first name. Optional, used to pre-fill name in Click to Pay. Max 100 chars. |
+| `lastName` | String | No | Cardholder last name. Optional, used to pre-fill name in Click to Pay. Max 100 chars. |
+| `isAdditional3DSData` | Integer | No | Enable additional 3DS data on this transaction. `1` = enable, `0` / omit = standard. |
 
 ---
 

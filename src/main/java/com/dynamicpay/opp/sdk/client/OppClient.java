@@ -74,6 +74,12 @@ public class OppClient {
         if (request.getAttach() != null)            params.put("attach",            request.getAttach());
         if (request.getEmail() != null)             params.put("email",             request.getEmail());
         if (request.getMobile() != null)            params.put("mobile",            request.getMobile());
+        if (request.getFirstName() != null)         params.put("firstName",         request.getFirstName());
+        if (request.getLastName() != null)          params.put("lastName",          request.getLastName());
+        if (request.getMobileCountryCode() != null) params.put("mobileCountryCode", request.getMobileCountryCode());
+        if (request.getApplyServiceAccessType() != null) params.put("applyServiceAccessType", request.getApplyServiceAccessType());
+        if (request.getCompanyName() != null)            params.put("companyName",            request.getCompanyName());
+        if (request.getIsAdditional3DSData() != null)    params.put("isAdditional3DSData",    request.getIsAdditional3DSData());
 
         // Sign and attach to params
         String sign = signer.sign(params);
