@@ -89,6 +89,8 @@ public class PaymentRequest {
      */
     private String companyName;
 
+    private String companyId; // Optional field for backward compatibility. if not present, companyId is always taken from SDK config.
+
     /**
      * Whether to include additional 3DS data on this transaction.
      * 1 = include additional 3DS data, 0 / null = standard (default). Optional.
@@ -154,6 +156,9 @@ public class PaymentRequest {
 
     public String getCompanyName() { return companyName; }
     public void setCompanyName(String companyName) { this.companyName = companyName; }
+
+    public String getCompanyId() { return companyId; }
+    public void setCompanyId(String companyId) { this.companyId = companyId; }
 
     public Integer getIsAdditional3DSData() { return isAdditional3DSData; }
     public void setIsAdditional3DSData(Integer isAdditional3DSData) { this.isAdditional3DSData = isAdditional3DSData; }

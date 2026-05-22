@@ -58,7 +58,11 @@ public class OppClient {
 
         // Build request parameters for signing
         Map<String, Object> params = new HashMap<>();
-        params.put("companyId",        properties.getCompanyId());
+        if (request.getCompanyId() != null){
+            params.put("companyId", request.getCompanyId());
+        }else{
+            params.put("companyId", properties.getCompanyId());
+        };
         params.put("merchantOrderNum", request.getMerchantOrderNum());
         params.put("amount",           request.getAmount());
         params.put("currency",         request.getCurrency());
