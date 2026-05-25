@@ -7,6 +7,8 @@ import com.dynamicpay.opp.sdk.auth.Signer;
 import com.dynamicpay.opp.sdk.config.OppProperties;
 import com.dynamicpay.opp.sdk.model.PaymentRequest;
 import com.dynamicpay.opp.sdk.model.PaymentResponse;
+import com.dynamicpay.opp.sdk.model.RevokeRequest;
+import com.dynamicpay.opp.sdk.model.RevokeResponse;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -85,8 +87,14 @@ public class OppClient {
         if (request.getCompanyName() != null)            params.put("companyName",            request.getCompanyName());
         if (request.getIsAdditional3DSData() != null)    params.put("isAdditional3DSData",    request.getIsAdditional3DSData());
 
-        // Sign and attach to params
-        String sign = signer.sign(params);
+        // 选择签名所用的 Signer：
+        //   1) request 携带了 privateKey（PEM 字符串）→ 临时用该私钥构建 Signer，仅本次调用使用；
+        //   2) 否则使用注入的默认 signer（绑定 opp.private-key-path）。
+        // 注意：privateKey 字段不进入 params，也就不会被签名 / 不会发送到服务端。
+        Signer effectiveSigner = (request.getPrivateKey() != null && !request.getPrivateKey().trim().isEmpty())
+                ? Signer.fromPemContent(request.getPrivateKey())
+                : signer;
+        String sign = effectiveSigner.sign(params);
         params.put("sign", sign);
 
         // Call OPP service to obtain orderNum + accessKey
@@ -130,11 +138,73 @@ public class OppClient {
     }
 
     /**
+     * Revoke an unpaid order. Idempotent: repeated calls on the same already-revoked order
+     * return {@code code = 0, message = "Already revoked"}.
+     *
+     * Eligibility (enforced server-side): {@code status=0 (unpaid)} AND
+     * {@code is_dispatched=0 (not yet dispatched to downstream payment channel)}.
+     * Paid or dispatched orders cannot be revoked — use refund flow instead.
+     *
+     * @param request Revoke request, see {@link RevokeRequest} for field semantics.
+     * @return {@link RevokeResponse} with code/message/revokeTime. Never null.
+     *         The caller is expected to check {@code response.isSuccess()} or {@code response.getCode()}.
+     */
+    public RevokeResponse revokeOrder(RevokeRequest request) {
+        if (request == null || request.getOrderNum() == null || request.getOrderNum().trim().isEmpty()) {
+            throw new IllegalArgumentException("[OPP SDK] revokeOrder: orderNum must not be blank");
+        }
+        String timestamp = String.valueOf(System.currentTimeMillis() / 1000);
+
+        // companyId: 用户传则用，否则 fallback 到 SDK 配置（与 createPaymentUrl 行为一致）
+        String companyId = (request.getCompanyId() != null && !request.getCompanyId().trim().isEmpty())
+                ? request.getCompanyId()
+                : properties.getCompanyId();
+
+        // 构造签名参数。注意：privateKey 字段绝不进 params（不进签名内容、不进 HTTP body）。
+        Map<String, Object> params = new HashMap<>();
+        params.put("companyId", companyId);
+        params.put("orderNum", request.getOrderNum());
+        params.put("timestamp", timestamp);
+        if (request.getApplyServiceAccessType() != null) {
+            params.put("applyServiceAccessType", request.getApplyServiceAccessType());
+        }
+        if (request.getRevokeReason() != null) {
+            params.put("revokeReason", request.getRevokeReason());
+        }
+
+        // 选 Signer：request 带 privateKey → 临时 Signer；否则用注入的默认 signer
+        Signer effectiveSigner = (request.getPrivateKey() != null && !request.getPrivateKey().trim().isEmpty())
+                ? Signer.fromPemContent(request.getPrivateKey())
+                : signer;
+        String sign = effectiveSigner.sign(params);
+        params.put("sign", sign);
+
+        String url = properties.resolveServerUrl() + "/api/payment/order/" + request.getOrderNum() + "/revoke";
+        JsonObject responseJson = sendJson("PATCH", url, params);
+
+        int code = responseJson.has("code") ? responseJson.get("code").getAsInt() : -1;
+        String message = responseJson.has("message") && !responseJson.get("message").isJsonNull()
+                ? responseJson.get("message").getAsString()
+                : null;
+        String revokeTime = responseJson.has("revokeTime") && !responseJson.get("revokeTime").isJsonNull()
+                ? responseJson.get("revokeTime").getAsString()
+                : null;
+        return new RevokeResponse(code, message, revokeTime);
+    }
+
+    /**
      * Send a POST request with a JSON body.
      * Uses JDK 11 built-in HttpClient. Read timeout: 30 seconds.
      */
     private JsonObject post(String url, Map<String, Object> params) {
-        // Remove null and empty-string values so the server never receives phantom fields
+        return sendJson("POST", url, params);
+    }
+
+    /**
+     * Generic JSON HTTP send (POST / PATCH / etc).
+     * Strips null and empty-string values so the server never receives phantom fields.
+     */
+    private JsonObject sendJson(String method, String url, Map<String, Object> params) {
         Map<String, Object> clean = new java.util.LinkedHashMap<>();
         for (Map.Entry<String, Object> e : params.entrySet()) {
             if (e.getValue() != null && !e.getValue().toString().isEmpty()) {
@@ -146,7 +216,7 @@ public class OppClient {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Content-Type", CONTENT_TYPE)
-                .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
+                .method(method, HttpRequest.BodyPublishers.ofString(bodyJson))
                 .timeout(Duration.ofSeconds(30))
                 .build();
         try {

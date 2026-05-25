@@ -25,8 +25,30 @@ public class Signer {
 
     private final PrivateKey privateKey;
 
+    /** 从 PEM 文件路径加载私钥（默认 / 配置态使用）。 */
     public Signer(String privateKeyPath) {
         this.privateKey = loadFromFile(privateKeyPath);
+    }
+
+    /** 内部用：直接绑定已解析的 PrivateKey（由 fromPemContent 调用）。 */
+    private Signer(PrivateKey privateKey) {
+        this.privateKey = privateKey;
+    }
+
+    /**
+     * 从 PEM 字符串内容构建 Signer（动态 / 请求态使用）。
+     * 适用于 {@code PaymentRequest.privateKey} 携带的临时私钥签名场景。
+     * 支持标准 PEM（含 -----BEGIN/END-----）和裸 Base64 字符串。
+     */
+    public static Signer fromPemContent(String pemContent) {
+        if (pemContent == null || pemContent.trim().isEmpty()) {
+            throw new IllegalArgumentException("[OPP SDK] privateKey content must not be blank");
+        }
+        try {
+            return new Signer(parsePem(pemContent));
+        } catch (Exception e) {
+            throw new RuntimeException("[OPP SDK] Failed to parse private key from inline content", e);
+        }
     }
 
     public String sign(Map<String, Object> params) {
@@ -44,14 +66,19 @@ public class Signer {
     private PrivateKey loadFromFile(String path) {
         try {
             String content = new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
-            String cleaned = content
-                    .replaceAll("-----.*?-----", "")
-                    .replaceAll("\\s+", "");
-            byte[] der = Base64.getDecoder().decode(cleaned);
-            return isPkcs8(der) ? loadPkcs8(der) : loadPkcs1(der);
+            return parsePem(content);
         } catch (Exception e) {
             throw new RuntimeException("[OPP SDK] Failed to load private key from: " + path, e);
         }
+    }
+
+    /** 共享的 PEM 解析逻辑：剥离 header / 空白，base64 decode，自动识别 PKCS8 / PKCS1。 */
+    private static PrivateKey parsePem(String content) throws Exception {
+        String cleaned = content
+                .replaceAll("-----.*?-----", "")
+                .replaceAll("\\s+", "");
+        byte[] der = Base64.getDecoder().decode(cleaned);
+        return isPkcs8(der) ? loadPkcs8(der) : loadPkcs1(der);
     }
 
     /**
@@ -75,12 +102,12 @@ public class Signer {
         return (der[offset] & 0xFF) == 0x30;
     }
 
-    private PrivateKey loadPkcs8(byte[] der) throws Exception {
+    private static PrivateKey loadPkcs8(byte[] der) throws Exception {
         PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(der);
         return KeyFactory.getInstance("RSA").generatePrivate(spec);
     }
 
-    private PrivateKey loadPkcs1(byte[] der) throws Exception {
+    private static PrivateKey loadPkcs1(byte[] der) throws Exception {
         // Wrap PKCS1 DER as PKCS8 to load without BouncyCastle
         byte[] pkcs8 = wrapPkcs1ToPkcs8(der);
         return loadPkcs8(pkcs8);

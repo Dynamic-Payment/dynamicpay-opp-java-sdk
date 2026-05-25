@@ -270,6 +270,122 @@ public String createInstallmentOrder(String orderId, long amountCents, String us
 
 ---
 
+### Example 4: Multi-Merchant Whitelist (Buyer Picks From a Subset)
+
+Pass a comma-separated list of `merCode`s to restrict the payment page to a specific subset.
+The buyer chooses one merchant from this whitelist. All listed codes must be valid for the
+company and currency — any invalid code returns `code: 1058`.
+
+```java
+public String createMultiMerchantOrder(String orderId, long amountCents) {
+    var request = new PaymentRequest();
+    request.setMerchantOrderNum(orderId);
+    request.setAmount(amountCents);
+    request.setCurrency("HKD");
+    request.setMerchantCode("960105331000001,960105331000002");   // ← comma-separated whitelist
+    return oppClient.createPaymentUrl(request).getPayUrl();
+}
+```
+
+---
+
+## Revoking an Order
+
+Merchant-initiated cancellation of an **unpaid, not-yet-dispatched** order:
+
+```java
+import com.dynamicpay.opp.sdk.client.OppClient;
+import com.dynamicpay.opp.sdk.model.RevokeRequest;
+import com.dynamicpay.opp.sdk.model.RevokeResponse;
+
+@Service
+public class OrderCancelService {
+
+    @Autowired
+    private OppClient oppClient;
+
+    public void cancelOrder(String orderNum) {
+        RevokeRequest request = new RevokeRequest();
+        request.setOrderNum(orderNum);
+        request.setRevokeReason("Customer requested cancellation");
+        // companyId / applyServiceAccessType optional — defaults to SDK config
+
+        RevokeResponse response = oppClient.revokeOrder(request);
+
+        if (response.isSuccess()) {
+            System.out.println("Revoked at: " + response.getRevokeTime());
+        } else {
+            System.err.println("Revoke failed: code=" + response.getCode()
+                    + " message=" + response.getMessage());
+        }
+    }
+}
+```
+
+### Eligibility
+
+The server **only** revokes orders satisfying **both** conditions:
+
+| Field | Required value | Meaning |
+|---|---|---|
+| `status` | `0` | Order is unpaid |
+| `is_dispatched` | `0` | Order has not been forwarded to a downstream payment channel |
+
+Paid orders or orders already dispatched cannot be revoked — use the refund flow instead.
+
+### Idempotency
+
+Calling `revokeOrder` twice on the same already-revoked order returns:
+
+```json
+{ "code": 0, "message": "Already revoked" }
+```
+
+Safe to retry on network errors.
+
+### RevokeRequest Fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `orderNum` | String | Yes | Platform-issued order number to revoke. Echoed in the URL path and the body — server cross-checks. |
+| `companyId` | String | No | Defaults to `opp.company-id` from SDK config. Override per-call when the SDK serves multiple merchants. |
+| `applyServiceAccessType` | String | No | `opp` (default) or `billpay`. Determines server-side verification key source. |
+| `revokeReason` | String | No | Free-form audit note, max 256 chars. Persisted in `opp_order.revoke_reason`. |
+| `privateKey` | String | No | Inline PEM private key for this call only. Same semantics as `PaymentRequest.privateKey` — useful for multi-merchant signing. Never sent in the HTTP body or signed content. |
+
+### RevokeResponse Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `code` | int | `0` on success or idempotent already-revoked; see error code table below |
+| `message` | String | Human-readable result |
+| `revokeTime` | String | Server-side revoke timestamp (ISO-8601 LocalDateTime, UTC). Populated when an actual state change occurred. |
+
+### Error Codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success or already revoked (idempotent) |
+| `1020` | Timestamp outside allowed window |
+| `1022` | `companyId` missing |
+| `1023` | Signature verification failed |
+| `1024` | Merchant not authorized |
+| `1054` | `orderNum` mismatch between URL path and body (SDK guards against this internally) |
+| `1055` | Order not found |
+| `1056` | Order does not belong to this company |
+| `1057` | Order not in a revocable state (already paid or already dispatched) |
+
+### Side Effects
+
+A successful revoke also triggers (server-side):
+
+1. **Redis access key cleanup** — invalidates any in-flight payment page session for this order.
+2. **JWT blacklist entry** — any already-issued JWT for this order is rejected by the OPP interceptor for the remainder of its 5-minute lifetime.
+
+So even if a buyer holds an active JWT, **they cannot complete payment after revoke**.
+
+---
+
 ## PaymentRequest Fields
 
 | Field | Type | Required | Description |
@@ -278,7 +394,7 @@ public String createInstallmentOrder(String orderId, long amountCents, String us
 | `amount` | long | Yes | Amount in smallest currency unit (cents) |
 | `currency` | String | Yes | ISO 4217 currency code, e.g. `USD` |
 | `paymentType` | String | No | `alipay` / `wechat` / `unionpay` / `vmpay`. Omit to show all options. Mastercard Click to Pay is triggered automatically by merchant configuration — no value needed. |
-| `merchantCode` | String | No | Specific acquirer merchant code. Required when `extraTradeCode` is `delegated`. |
+| `merchantCode` | String | No | Acquirer merchant code. Single value (`"960105331000001"`) → single-merchant payment page. Comma-separated multi-value (`"960105331000001,960105331000002"`) → multi-merchant payment page restricted to this whitelist; buyer picks one. **All listed codes must be valid** (any invalid code → `code: 1058`). Whitespace around commas tolerated, duplicates de-duplicated. Max 256 chars. Required when `extraTradeCode` is `delegated`. |
 | `description` | String | No | Order description |
 | `notifyUrl` | String | No | Server-to-server async notification URL |
 | `redirectSuccessUrl` | String | No | Browser redirect URL after successful payment (appended to `payUrl` as query parameter) |
