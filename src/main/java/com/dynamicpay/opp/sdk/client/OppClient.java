@@ -168,6 +168,11 @@ public class OppClient {
         if (request.getApplyServiceAccessType() != null) {
             params.put("applyServiceAccessType", request.getApplyServiceAccessType());
         }
+        // companyName：billpay 通道必填（服务端 SignDataUtils 验签时强制要求），
+        // OPP 通道可空（服务端从 DB 取 orgName）。
+        if (request.getCompanyName() != null) {
+            params.put("companyName", request.getCompanyName());
+        }
         if (request.getRevokeReason() != null) {
             params.put("revokeReason", request.getRevokeReason());
         }

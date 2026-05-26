@@ -22,6 +22,14 @@ public class RevokeRequest {
     private String companyId;
 
     /**
+     * Company display name. Optional in general; <b>REQUIRED when applyServiceAccessType is "billpay"</b>.
+     * Same semantics as PaymentRequest.companyName — server uses it as orgName for signature verification
+     * under the BillPay channel (where opp_organization table is bypassed). Missing in billpay mode
+     * returns code 1037 "companyName is required when applyServiceAccessType is billpay".
+     */
+    private String companyName;
+
+    /**
      * Order number to revoke (assigned by the platform when the access key was created). Required.
      * Echoed both in the URL path and in the body — server cross-checks them.
      */
@@ -56,6 +64,9 @@ public class RevokeRequest {
 
     public String getCompanyId() { return companyId; }
     public void setCompanyId(String companyId) { this.companyId = companyId; }
+
+    public String getCompanyName() { return companyName; }
+    public void setCompanyName(String companyName) { this.companyName = companyName; }
 
     public String getOrderNum() { return orderNum; }
     public void setOrderNum(String orderNum) { this.orderNum = orderNum; }
