@@ -10,12 +10,16 @@ import com.dynamicpay.opp.sdk.model.PaymentResponse;
 import com.dynamicpay.opp.sdk.model.RevokeRequest;
 import com.dynamicpay.opp.sdk.model.RevokeResponse;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -29,8 +33,13 @@ import java.util.Map;
  */
 public class OppClient {
 
+    private static final Logger logger = LoggerFactory.getLogger(OppClient.class);
+
     private static final String CONTENT_TYPE = "application/json; charset=utf-8";
     private static final Gson GSON = new Gson();
+
+    /** 响应 body 打 log 时的最大长度，避免超长 HTML 错误页刷爆日志 */
+    private static final int MAX_LOGGED_BODY = 2000;
 
     private final OppProperties properties;
     private final Signer signer;
@@ -57,6 +66,12 @@ public class OppClient {
      */
     public PaymentResponse createPaymentUrl(PaymentRequest request) {
         String timestamp = String.valueOf(System.currentTimeMillis() / 1000);
+        // 入口 log：关键业务字段（不含 sign / privateKey）。inlineKey 仅标记是否用了请求级私钥，不打内容。
+        logger.info("[OPP SDK] createPaymentUrl | companyId={} merchantOrderNum={} amount={} currency={} paymentType={} applyServiceAccessType={} inlineKey={}",
+                request.getCompanyId() != null ? request.getCompanyId() : properties.getCompanyId(),
+                request.getMerchantOrderNum(), request.getAmount(), request.getCurrency(),
+                request.getPaymentType(), request.getApplyServiceAccessType(),
+                (request.getPrivateKey() != null && !request.getPrivateKey().trim().isEmpty()));
 
         // Build request parameters for signing
         Map<String, Object> params = new HashMap<>();
@@ -151,9 +166,15 @@ public class OppClient {
      */
     public RevokeResponse revokeOrder(RevokeRequest request) {
         if (request == null || request.getOrderNum() == null || request.getOrderNum().trim().isEmpty()) {
+            logger.error("[OPP SDK] revokeOrder rejected locally: orderNum must not be blank");
             throw new IllegalArgumentException("[OPP SDK] revokeOrder: orderNum must not be blank");
         }
         String timestamp = String.valueOf(System.currentTimeMillis() / 1000);
+        // 入口 log：不含 sign / privateKey。
+        logger.info("[OPP SDK] revokeOrder | companyId={} orderNum={} applyServiceAccessType={} inlineKey={}",
+                request.getCompanyId() != null ? request.getCompanyId() : properties.getCompanyId(),
+                request.getOrderNum(), request.getApplyServiceAccessType(),
+                (request.getPrivateKey() != null && !request.getPrivateKey().trim().isEmpty()));
 
         // companyId: 用户传则用，否则 fallback 到 SDK 配置（与 createPaymentUrl 行为一致）
         String companyId = (request.getCompanyId() != null && !request.getCompanyId().trim().isEmpty())
@@ -210,7 +231,7 @@ public class OppClient {
      * Strips null and empty-string values so the server never receives phantom fields.
      */
     private JsonObject sendJson(String method, String url, Map<String, Object> params) {
-        Map<String, Object> clean = new java.util.LinkedHashMap<>();
+        Map<String, Object> clean = new LinkedHashMap<>();
         for (Map.Entry<String, Object> e : params.entrySet()) {
             if (e.getValue() != null && !e.getValue().toString().isEmpty()) {
                 clean.put(e.getKey(), e.getValue());
@@ -218,23 +239,54 @@ public class OppClient {
         }
         String bodyJson = GSON.toJson(clean);
 
+        // DEBUG：打脱敏后的请求体（sign 是签名结果非密钥，保留；params 里本就不含 privateKey）。
+        if (logger.isDebugEnabled()) {
+            logger.debug("[OPP SDK] -> {} {} body={}", method, url, bodyJson);
+        }
+
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Content-Type", CONTENT_TYPE)
                 .method(method, HttpRequest.BodyPublishers.ofString(bodyJson))
                 .timeout(Duration.ofSeconds(30))
                 .build();
+        long start = System.currentTimeMillis();
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
-                throw new RuntimeException("[OPP SDK] HTTP error: " + response.statusCode());
+            long cost = System.currentTimeMillis() - start;
+            int status = response.statusCode();
+            String respBody = response.body();
+            if (status != 200) {
+                // 关键：非 200 时把 response body 也打出来 —— 据此区分 403 是 nginx / 网关 / WAF / OPP 哪一层返回。
+                //   {"code":1030,...}        → OPP 应用
+                //   <html>403 Forbidden</html> → nginx
+                //   AWS/网关 JSON            → API 网关 / ALB
+                logger.error("[OPP SDK] <- {} {} status={} cost={}ms responseBody={}",
+                        method, url, status, cost, truncate(respBody));
+                throw new RuntimeException("[OPP SDK] HTTP error: " + status
+                        + ", body: " + truncate(respBody));
             }
-            return JsonParser.parseString(response.body()).getAsJsonObject();
+            logger.info("[OPP SDK] <- {} {} status={} cost={}ms", method, url, status, cost);
+            if (logger.isDebugEnabled()) {
+                logger.debug("[OPP SDK] <- {} {} responseBody={}", method, url, truncate(respBody));
+            }
+            return JsonParser.parseString(respBody).getAsJsonObject();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            logger.error("[OPP SDK] request interrupted | {} {}", method, url, e);
             throw new RuntimeException("[OPP SDK] Request interrupted", e);
         } catch (Exception e) {
+            // 网络层错误（连接拒绝 / 超时 / DNS / TLS）—— 区别于上面的 HTTP 非 200。
+            long cost = System.currentTimeMillis() - start;
+            logger.error("[OPP SDK] network error | {} {} cost={}ms err={}: {}",
+                    method, url, cost, e.getClass().getSimpleName(), e.getMessage());
             throw new RuntimeException("[OPP SDK] Network error: " + e.getMessage(), e);
         }
+    }
+
+    /** 截断超长 body，避免错误 HTML 页 / 大响应刷爆日志。 */
+    private static String truncate(String s) {
+        if (s == null) return "(null)";
+        return s.length() <= MAX_LOGGED_BODY ? s : s.substring(0, MAX_LOGGED_BODY) + "...(truncated, total " + s.length() + ")";
     }
 }

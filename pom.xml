@@ -27,6 +27,15 @@
             <version>2.11.0</version>
         </dependency>
 
+        <!-- Logging facade only (provided) — SDK 仅依赖 slf4j-api，日志实现（logback 等）由接入方提供。
+             scope=provided：编译期可用，不打进 SDK，也不强加实现到接入方 classpath。 -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>1.7.36</version>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- Spring Boot auto-configuration (provided — expected in the consumer project) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

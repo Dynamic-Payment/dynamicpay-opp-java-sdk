@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *   opp:
  *     company-id: YOUR_COMPANY_ID
  *     private-key-path: /etc/opp/private_key_pkcs8.pem
- *     environment: sandbox   # sandbox or prod
+ *     environment: sandbox   # sandbox or prod; defaults to prod when omitted
  *
  * Optional URL overrides (take precedence over the built-in defaults):
  *   opp:
@@ -27,8 +27,8 @@ public class OppProperties {
     /** Absolute path to the RSA private key file (PKCS8 format, downloaded from merchant portal) */
     private String privateKeyPath;
 
-    /** Runtime environment: sandbox or prod. Defaults to sandbox. */
-    private String environment = "sandbox";
+    /** Runtime environment: sandbox or prod. Defaults to prod when not configured. */
+    private String environment = "prod";
 
     /**
      * Custom sandbox server URL (optional).

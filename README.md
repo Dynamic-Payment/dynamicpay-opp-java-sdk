@@ -24,7 +24,7 @@ Add the JitPack repository and dependency to your `pom.xml`:
     <dependency>
         <groupId>com.github.Dynamic-Payment</groupId>
         <artifactId>dynamicpay-opp-java-sdk</artifactId>
-        <version>1.1.0</version>
+        <version>1.0.2</version>
     </dependency>
 </dependencies>
 ```
@@ -45,7 +45,7 @@ Then add to your project's `pom.xml`:
 <dependency>
     <groupId>com.dynamicpay.opp</groupId>
     <artifactId>dynamicpay-opp-java-sdk</artifactId>
-    <version>1.1.0</version>
+    <version>1.0.2</version>
 </dependency>
 ```
 
@@ -71,6 +71,8 @@ opp:
 ```
 
 The SDK auto-configures itself via Spring Boot — no extra `@Bean` setup needed.
+
+> **⚠ Breaking change in 1.0.2**: When `opp.environment` is omitted, the SDK now defaults to `prod` (previously `sandbox`). If your application relied on the previous `sandbox` default, you must set `opp.environment: sandbox` explicitly to keep using sandbox.
 
 ---
 
@@ -350,6 +352,7 @@ Safe to retry on network errors.
 | `orderNum` | String | Yes | Platform-issued order number to revoke. Echoed in the URL path and the body — server cross-checks. |
 | `companyId` | String | No | Defaults to `opp.company-id` from SDK config. Override per-call when the SDK serves multiple merchants. |
 | `applyServiceAccessType` | String | No | `opp` (default) or `billpay`. Determines server-side verification key source. |
+| `companyName` | String | Conditional | Required when `applyServiceAccessType` is `billpay`. Used by the OPP server to locate the billpay signing key. Ignored for the default `opp` channel. |
 | `revokeReason` | String | No | Free-form audit note, max 256 chars. Persisted in `opp_order.revoke_reason`. |
 | `privateKey` | String | No | Inline PEM private key for this call only. Same semantics as `PaymentRequest.privateKey` — useful for multi-merchant signing. Never sent in the HTTP body or signed content. |
 
@@ -409,6 +412,9 @@ So even if a buyer holds an active JWT, **they cannot complete payment after rev
 | `firstName` | String | No | Cardholder first name. Optional, used to pre-fill name in Click to Pay. Max 100 chars. |
 | `lastName` | String | No | Cardholder last name. Optional, used to pre-fill name in Click to Pay. Max 100 chars. |
 | `isAdditional3DSData` | Integer | No | Enable additional 3DS data on this transaction. `1` = enable, `0` / omit = standard. |
+| `applyServiceAccessType` | String | No | `opp` (default) or `billpay`. Determines server-side verification key source. |
+| `companyName` | String | Conditional | Required when `applyServiceAccessType` is `billpay`. Used by the OPP server to locate the billpay signing key. Ignored for the default `opp` channel. |
+| `privateKey` | String | No | Inline PEM private key for this call only. Overrides the SDK's configured `opp.private-key-path` — useful when one SDK instance serves multiple merchants with different keys. Never sent in the HTTP body or signed content. |
 
 ---
 
@@ -419,15 +425,15 @@ So even if a buyer holds an active JWT, **they cannot complete payment after rev
 | Sandbox | `https://uat-opp-api.dynamicg.com` | `https://uat-opp.dynamicg.com` |
 | Production | `https://opp-api.dynamicg.com` | `https://opp.dynamicg.com` |
 
-Switch via `opp.environment: sandbox` or `opp.environment: prod` in `application.yml`. The URLs above are built-in defaults — **no URL configuration is required** for standard deployments.
+Switch via `opp.environment: sandbox` or `opp.environment: prod` in `application.yml`. **When `opp.environment` is omitted, the SDK defaults to `prod`** (changed in 1.0.2) — always set this property explicitly to avoid accidentally hitting production. The URLs above are built-in defaults — **no URL configuration is required** for standard deployments.
 
 For special cases (e.g. pointing at a local or staging server), you can override the defaults. **Do not set these properties unless explicitly instructed by DynamicPay technical staff.**
 
 ```yaml
 opp:
   environment: sandbox
-  sandbox-url: http://192.168.1.10:8085        # overrides sandbox API host
-  sandbox-page-url: http://192.168.1.10:3000   # overrides sandbox page host
+  sandbox-url: https://staging-api.example.com         # overrides sandbox API host
+  sandbox-page-url: https://staging-page.example.com   # overrides sandbox page host
   prod-url: https://my-custom-prod.example.com
   prod-page-url: https://my-custom-opp-page.example.com
 ```
