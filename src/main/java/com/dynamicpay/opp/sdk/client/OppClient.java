@@ -14,12 +14,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
-import java.net.URLDecoder;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -146,11 +143,11 @@ public class OppClient {
               .append("&accessKey=").append(accessKey)
               .append("&timestamp=").append(timestamp);
         if (request.getRedirectCallerUrl() != null)
-            payUrl.append("&redirectCallerUrl=").append(encodeRedirectUrl(request.getRedirectCallerUrl()));
+            payUrl.append("&redirectCallerUrl=").append(request.getRedirectCallerUrl());
         if (request.getRedirectSuccessUrl() != null)
-            payUrl.append("&redirectSuccessUrl=").append(encodeRedirectUrl(request.getRedirectSuccessUrl()));
+            payUrl.append("&redirectSuccessUrl=").append(request.getRedirectSuccessUrl());
         if (request.getRedirectErrorUrl() != null)
-            payUrl.append("&redirectErrorUrl=").append(encodeRedirectUrl(request.getRedirectErrorUrl()));
+            payUrl.append("&redirectErrorUrl=").append(request.getRedirectErrorUrl());
 
         return new PaymentResponse(orderNum, accessKey, payUrl.toString());
     }
@@ -291,23 +288,5 @@ public class OppClient {
     private static String truncate(String s) {
         if (s == null) return "(null)";
         return s.length() <= MAX_LOGGED_BODY ? s : s.substring(0, MAX_LOGGED_BODY) + "...(truncated, total " + s.length() + ")";
-    }
-
-    /**
-     * Encode a redirect URL for use as a query parameter value.
-     * If the value already contains percent-encoded sequences (i.e. decoding
-     * produces a different string), it is returned as-is to avoid double-encoding.
-     * Otherwise it is URLEncoder-encoded so that characters like '#', '?', '&'
-     * embedded in the URL do not break the outer query string.
-     */
-    private static String encodeRedirectUrl(String url) {
-        if (url == null) return null;
-        try {
-            String decoded = URLDecoder.decode(url, StandardCharsets.UTF_8.name());
-            if (!decoded.equals(url)) return url; // already encoded
-            return URLEncoder.encode(url, StandardCharsets.UTF_8.name());
-        } catch (Exception e) {
-            try { return URLEncoder.encode(url, StandardCharsets.UTF_8.name()); } catch (Exception ex) { return url; }
-        }
     }
 }
