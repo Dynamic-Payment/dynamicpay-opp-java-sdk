@@ -60,10 +60,14 @@ public class OppClient {
     public OppClient(OppProperties properties, Signer signer) {
         this.properties = properties;
         this.signer = signer;
+        // retryOnConnectionFailure=false：createPaymentUrl 非幂等，若服务端已收到请求
+        // 但响应链路断开，OkHttp 默认会自动重试，可能导致同一订单产生多条 accesskey 记录。
+        // 是否重试由业务层决定，HTTP client 层不静默重试。
         this.httpClient = new OkHttpClient.Builder()
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
                 .writeTimeout(30, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(false)
                 .build();
     }
 
