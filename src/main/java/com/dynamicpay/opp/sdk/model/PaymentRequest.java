@@ -91,6 +91,13 @@ public class PaymentRequest {
     private String mobileCountryCode;
 
     /**
+     * Sub-merchant amount, pass-through field forwarded to UnionPay as {@code sub_mer_amount}.
+     * Optional. Max 1024 characters. Only takes effect when the acquirer merchant is configured
+     * with {@code subMerchantSupport=Y} on the server; otherwise ignored.
+     */
+    private String subMerAmount;
+
+    /**
      * Service access type. Optional.
      * Allowed values: "opp" (default behavior) / "billpay".
      * - "opp"     — default OPP channel; server performs permissionOppCode check
@@ -193,6 +200,9 @@ public class PaymentRequest {
 
     public String getMobileCountryCode() { return mobileCountryCode; }
     public void setMobileCountryCode(String mobileCountryCode) { this.mobileCountryCode = mobileCountryCode; }
+
+    public String getSubMerAmount() { return subMerAmount; }
+    public void setSubMerAmount(String subMerAmount) { this.subMerAmount = subMerAmount; }
 
     public String getApplyServiceAccessType() { return applyServiceAccessType; }
     public void setApplyServiceAccessType(String applyServiceAccessType) { this.applyServiceAccessType = applyServiceAccessType; }

@@ -409,6 +409,7 @@ So even if a buyer holds an active JWT, **they cannot complete payment after rev
 | `email` | String | No | Cardholder email. Click to Pay only. When provided with `mobile`, skips the identity page. |
 | `mobile` | String | No | Cardholder mobile number in E.164 format (e.g. `+85212345678`). Click to Pay only. |
 | `mobileCountryCode` | String | No | Mobile country dialing code, e.g. `852` (HK), `61` (AU), `1` (US/CA). Click to Pay only. |
+| `subMerAmount` | String | No | Sub-merchant amount, pass-through forwarded to UnionPay as `sub_mer_amount`. Max 1024 chars. Only takes effect when the acquirer merchant is configured with `subMerchantSupport=Y`; otherwise ignored. |
 | `firstName` | String | No | Cardholder first name. Optional, used to pre-fill name in Click to Pay. Max 100 chars. |
 | `lastName` | String | No | Cardholder last name. Optional, used to pre-fill name in Click to Pay. Max 100 chars. |
 | `isAdditional3DSData` | Integer | No | Enable additional 3DS data on this transaction. `1` = enable, `0` / omit = standard. |

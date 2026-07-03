@@ -10,17 +10,20 @@ import com.dynamicpay.opp.sdk.model.PaymentResponse;
 import com.dynamicpay.opp.sdk.model.RevokeRequest;
 import com.dynamicpay.opp.sdk.model.RevokeResponse;
 
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Main entry point for the OPP SDK.
@@ -28,7 +31,9 @@ import java.util.Map;
  * Auto-configured by Spring Boot. Inject directly into your service:
  *   {@code @Autowired private OppClient oppClient; }
  *
- * HTTP client : JDK 11 built-in java.net.http.HttpClient (no third-party dependency)
+ * HTTP client : OkHttp 4.x — supports multi-IP fallback when DNS returns
+ *               several A records (avoids the JDK HttpClient limitation of
+ *               only ever attempting the first resolved address).
  * JSON library: Gson (Google, ~250KB, internationally trusted)
  */
 public class OppClient {
@@ -45,16 +50,20 @@ public class OppClient {
     private final Signer signer;
 
     /**
-     * JDK 11 built-in HttpClient. Thread-safe and reusable.
-     * Connection timeout: 10 seconds.
+     * OkHttp client. Thread-safe and reusable; shares connection pool across requests.
+     * Multi-IP fallback: when DNS returns multiple A records OkHttp's RouteSelector
+     * tries each address until one succeeds — fixes the JDK HttpClient quirk where
+     * only the first resolved IP is used.
      */
-    private final HttpClient httpClient;
+    private final OkHttpClient httpClient;
 
     public OppClient(OppProperties properties, Signer signer) {
         this.properties = properties;
         this.signer = signer;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
+        this.httpClient = new OkHttpClient.Builder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
                 .build();
     }
 
@@ -98,6 +107,7 @@ public class OppClient {
         if (request.getFirstName() != null)         params.put("firstName",         request.getFirstName());
         if (request.getLastName() != null)          params.put("lastName",          request.getLastName());
         if (request.getMobileCountryCode() != null) params.put("mobileCountryCode", request.getMobileCountryCode());
+        if (request.getSubMerAmount() != null)      params.put("subMerAmount",      request.getSubMerAmount());
         if (request.getApplyServiceAccessType() != null) params.put("applyServiceAccessType", request.getApplyServiceAccessType());
         if (request.getCompanyName() != null)            params.put("companyName",            request.getCompanyName());
         if (request.getIsAdditional3DSData() != null)    params.put("isAdditional3DSData",    request.getIsAdditional3DSData());
@@ -220,7 +230,6 @@ public class OppClient {
 
     /**
      * Send a POST request with a JSON body.
-     * Uses JDK 11 built-in HttpClient. Read timeout: 30 seconds.
      */
     private JsonObject post(String url, Map<String, Object> params) {
         return sendJson("POST", url, params);
@@ -244,18 +253,18 @@ public class OppClient {
             logger.debug("[OPP SDK] -> {} {} body={}", method, url, bodyJson);
         }
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Content-Type", CONTENT_TYPE)
-                .method(method, HttpRequest.BodyPublishers.ofString(bodyJson))
-                .timeout(Duration.ofSeconds(30))
+        RequestBody body = RequestBody.create(bodyJson, MediaType.parse(CONTENT_TYPE));
+        Request httpRequest = new Request.Builder()
+                .url(url)
+                .method(method, body)
                 .build();
+
         long start = System.currentTimeMillis();
-        try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        try (Response response = httpClient.newCall(httpRequest).execute()) {
             long cost = System.currentTimeMillis() - start;
-            int status = response.statusCode();
-            String respBody = response.body();
+            int status = response.code();
+            ResponseBody rb = response.body();
+            String respBody = rb != null ? rb.string() : "";
             if (status != 200) {
                 // 关键：非 200 时把 response body 也打出来 —— 据此区分 403 是 nginx / 网关 / WAF / OPP 哪一层返回。
                 //   {"code":1030,...}        → OPP 应用
@@ -271,12 +280,9 @@ public class OppClient {
                 logger.debug("[OPP SDK] <- {} {} responseBody={}", method, url, truncate(respBody));
             }
             return JsonParser.parseString(respBody).getAsJsonObject();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            logger.error("[OPP SDK] request interrupted | {} {}", method, url, e);
-            throw new RuntimeException("[OPP SDK] Request interrupted", e);
-        } catch (Exception e) {
+        } catch (IOException e) {
             // 网络层错误（连接拒绝 / 超时 / DNS / TLS）—— 区别于上面的 HTTP 非 200。
+            // OkHttp 把所有连接 / 读写超时 / DNS 失败统一抛 IOException。
             long cost = System.currentTimeMillis() - start;
             logger.error("[OPP SDK] network error | {} {} cost={}ms err={}: {}",
                     method, url, cost, e.getClass().getSimpleName(), e.getMessage());

@@ -18,7 +18,15 @@
     </properties>
 
     <dependencies>
-        <!-- HTTP client: uses JDK 11 built-in java.net.http.HttpClient, no extra dependencies -->
+        <!-- HTTP client: OkHttp.
+             选型原因：JDK 11 内置 java.net.http.HttpClient 在 DNS 返回多 A 记录时
+             只会尝试第一个 IP，不做 fallback；OkHttp 的 RouteSelector 会自动逐个
+             尝试，遇到不可达节点也能透明切换。 -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>4.12.0</version>
+        </dependency>
 
         <!-- JSON: Gson, lightweight (~250KB) -->
         <dependency>
