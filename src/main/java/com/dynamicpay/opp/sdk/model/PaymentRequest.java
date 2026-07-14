@@ -1,5 +1,7 @@
 package com.dynamicpay.opp.sdk.model;
 
+import java.util.List;
+
 /**
  * Payment link creation request parameters.
  */
@@ -91,11 +93,15 @@ public class PaymentRequest {
     private String mobileCountryCode;
 
     /**
-     * Sub-merchant amount, pass-through field forwarded to UnionPay as {@code sub_mer_amount}.
-     * Optional. Max 1024 characters. Only takes effect when the acquirer merchant is configured
-     * with {@code subMerchantSupport=Y} on the server; otherwise ignored.
+     * Sub-merchant amount split, pass-through field forwarded to UnionPay as {@code sub_mer_amount}.
+     * Optional. Max 20 entries (enforced server-side). Only takes effect when the acquirer merchant
+     * is configured with {@code subMerchantSupport=Y} on the server; otherwise ignored.
+     *
+     * NOTE — signature compatibility: do not replace {@link SubMerItemDTO} with a different class,
+     * rename its fields, or reorder them without re-verifying against the server's Lombok-generated
+     * {@code toString()} output. See {@link SubMerItemDTO} javadoc for why.
      */
-    private String subMerAmount;
+    private List<SubMerItemDTO> subMerAmount;
 
     /**
      * Service access type. Optional.
@@ -201,8 +207,8 @@ public class PaymentRequest {
     public String getMobileCountryCode() { return mobileCountryCode; }
     public void setMobileCountryCode(String mobileCountryCode) { this.mobileCountryCode = mobileCountryCode; }
 
-    public String getSubMerAmount() { return subMerAmount; }
-    public void setSubMerAmount(String subMerAmount) { this.subMerAmount = subMerAmount; }
+    public List<SubMerItemDTO> getSubMerAmount() { return subMerAmount; }
+    public void setSubMerAmount(List<SubMerItemDTO> subMerAmount) { this.subMerAmount = subMerAmount; }
 
     public String getApplyServiceAccessType() { return applyServiceAccessType; }
     public void setApplyServiceAccessType(String applyServiceAccessType) { this.applyServiceAccessType = applyServiceAccessType; }
