@@ -24,7 +24,7 @@ Add the JitPack repository and dependency to your `pom.xml`:
     <dependency>
         <groupId>com.github.Dynamic-Payment</groupId>
         <artifactId>dynamicpay-opp-java-sdk</artifactId>
-        <version>1.0.2</version>
+        <version>1.1.1</version>
     </dependency>
 </dependencies>
 ```
@@ -45,7 +45,7 @@ Then add to your project's `pom.xml`:
 <dependency>
     <groupId>com.dynamicpay.opp</groupId>
     <artifactId>dynamicpay-opp-java-sdk</artifactId>
-    <version>1.0.2</version>
+    <version>1.1.1</version>
 </dependency>
 ```
 
@@ -291,6 +291,31 @@ public String createMultiMerchantOrder(String orderId, long amountCents) {
 
 ---
 
+### Example 5: UnionPay Sub-Merchant Split
+
+Only takes effect when your acquirer merchant is provisioned with `subMerchantSupport=Y`; ignored otherwise.
+
+```java
+import com.dynamicpay.opp.sdk.model.SubMerItemDTO;
+
+public String createUnionpaySplitOrder(String orderId, long amountCents) {
+    var request = new PaymentRequest();
+    request.setMerchantOrderNum(orderId);
+    request.setAmount(amountCents);
+    request.setCurrency("CNY");
+    request.setPaymentType("unionpay");
+
+    request.setSubMerAmount(java.util.Arrays.asList(
+        new SubMerItemDTO("M001", "A", 60000L),
+        new SubMerItemDTO("M002", "D", 40000L)
+    ));
+
+    return oppClient.createPaymentUrl(request).getPayUrl();
+}
+```
+
+---
+
 ## Revoking an Order
 
 Merchant-initiated cancellation of an **unpaid, not-yet-dispatched** order:
@@ -409,13 +434,24 @@ So even if a buyer holds an active JWT, **they cannot complete payment after rev
 | `email` | String | No | Cardholder email. Click to Pay only. When provided with `mobile`, skips the identity page. |
 | `mobile` | String | No | Cardholder mobile number in E.164 format (e.g. `+85212345678`). Click to Pay only. |
 | `mobileCountryCode` | String | No | Mobile country dialing code, e.g. `852` (HK), `61` (AU), `1` (US/CA). Click to Pay only. |
-| `subMerAmount` | String | No | Sub-merchant amount, pass-through forwarded to UnionPay as `sub_mer_amount`. Max 1024 chars. Only takes effect when the acquirer merchant is configured with `subMerchantSupport=Y`; otherwise ignored. |
+| `subMerAmount` | `List<SubMerItemDTO>` | No | Sub-merchant amount split, forwarded to UnionPay as `sub_mer_amount`. Each entry is `{subMid, type, amount}` (see below), max 20 entries. Only takes effect when the acquirer merchant is configured with `subMerchantSupport=Y`; otherwise ignored. |
 | `firstName` | String | No | Cardholder first name. Optional, used to pre-fill name in Click to Pay. Max 100 chars. |
 | `lastName` | String | No | Cardholder last name. Optional, used to pre-fill name in Click to Pay. Max 100 chars. |
 | `isAdditional3DSData` | Integer | No | Enable additional 3DS data on this transaction. `1` = enable, `0` / omit = standard. |
 | `applyServiceAccessType` | String | No | `opp` (default) or `billpay`. Determines server-side verification key source. |
+| `companyId` | String | No | Defaults to `opp.company-id` from SDK config. Override per-call when the SDK serves multiple merchants. |
 | `companyName` | String | Conditional | Required when `applyServiceAccessType` is `billpay`. Used by the OPP server to locate the billpay signing key. Ignored for the default `opp` channel. |
 | `privateKey` | String | No | Inline PEM private key for this call only. Overrides the SDK's configured `opp.private-key-path` — useful when one SDK instance serves multiple merchants with different keys. Never sent in the HTTP body or signed content. |
+
+> **⚠ Breaking change in 1.1.1**: `subMerAmount` was a plain `String` (caller-formatted, max 1024 chars) through 1.1.0. From 1.1.1 it is `List<SubMerItemDTO>` instead — the old string form no longer compiles. If your code called `request.setSubMerAmount("...")`, update it to build a list of `SubMerItemDTO` (see below and Example 5).
+
+### SubMerItemDTO Fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `subMid` | String | Yes | Sub-merchant ID, max 32 chars |
+| `type` | String | Yes | Split type |
+| `amount` | Long | Yes | Split amount in the smallest currency unit (cents), must be greater than 0 |
 
 ---
 
