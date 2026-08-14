@@ -31,6 +31,18 @@ public class OppProperties {
     private String environment = "prod";
 
     /**
+     * Whether {@link #validate()} requires {@code company-id} to be configured. Defaults to
+     * {@code true} — leave this alone unless DynamicPay technical staff told you otherwise.
+     *
+     * Set to {@code false} only for a server-registered caller integration that uses a
+     * server-side org_id override and genuinely has no companyId to configure (the server
+     * determines order ownership itself; the caller must not send companyId at all). Ordinary
+     * merchant integrations ("opp" default channel, or "billpay") always need a real
+     * {@code company-id} — do not disable this check for those.
+     */
+    private boolean requireCompanyId = true;
+
+    /**
      * Custom sandbox server URL (optional).
      * When set, overrides the built-in sandbox default.
      */
@@ -63,6 +75,9 @@ public class OppProperties {
     public String getEnvironment() { return environment; }
     public void setEnvironment(String environment) { this.environment = environment; }
 
+    public boolean isRequireCompanyId() { return requireCompanyId; }
+    public void setRequireCompanyId(boolean requireCompanyId) { this.requireCompanyId = requireCompanyId; }
+
     public String getSandboxUrl() { return sandboxUrl; }
     public void setSandboxUrl(String sandboxUrl) { this.sandboxUrl = sandboxUrl; }
 
@@ -90,8 +105,9 @@ public class OppProperties {
     }
 
     public void validate() {
-        if (companyId == null || companyId.trim().isEmpty()) {
-            throw new IllegalStateException("[OPP SDK] opp.company-id must not be blank");
+        if (requireCompanyId && (companyId == null || companyId.trim().isEmpty())) {
+            throw new IllegalStateException("[OPP SDK] opp.company-id must not be blank"
+                    + " (set opp.require-company-id: false only if DynamicPay technical staff told you to)");
         }
         if (privateKeyPath == null || privateKeyPath.trim().isEmpty()) {
             throw new IllegalStateException("[OPP SDK] opp.private-key-path must not be blank");

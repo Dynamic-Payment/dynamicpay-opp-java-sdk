@@ -6,7 +6,7 @@
 
     <groupId>com.dynamicpay.opp</groupId>
     <artifactId>dynamicpay-opp-java-sdk</artifactId>
-    <version>1.1.1</version>
+    <version>1.2.0</version>
     <packaging>jar</packaging>
     <description>DynamicPay OPP Java SDK</description>
 

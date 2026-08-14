@@ -87,6 +87,9 @@ public class OppClient {
                 (request.getPrivateKey() != null && !request.getPrivateKey().trim().isEmpty()));
 
         // Build request parameters for signing
+        // companyId: null → fall back to SDK config; explicit "" → omit entirely (see
+        // PaymentRequest.companyId javadoc). Same rule applied consistently in revokeOrder below —
+        // do not add a trim()/isEmpty() check here, that would silently ignore an explicit "" opt-out.
         Map<String, Object> params = new HashMap<>();
         if (request.getCompanyId() != null){
             params.put("companyId", request.getCompanyId());
@@ -185,15 +188,16 @@ public class OppClient {
         }
         String timestamp = String.valueOf(System.currentTimeMillis() / 1000);
         // 入口 log：不含 sign / privateKey。
-        logger.info("[OPP SDK] revokeOrder | companyId={} orderNum={} applyServiceAccessType={} inlineKey={}",
+        logger.info("[OPP SDK] revokeOrder | companyId={} orderNum={} applyServiceAccessType={} merCode={} inlineKey={}",
                 request.getCompanyId() != null ? request.getCompanyId() : properties.getCompanyId(),
-                request.getOrderNum(), request.getApplyServiceAccessType(),
+                request.getOrderNum(), request.getApplyServiceAccessType(), request.getMerCode(),
                 (request.getPrivateKey() != null && !request.getPrivateKey().trim().isEmpty()));
 
-        // companyId: 用户传则用，否则 fallback 到 SDK 配置（与 createPaymentUrl 行为一致）
-        String companyId = (request.getCompanyId() != null && !request.getCompanyId().trim().isEmpty())
-                ? request.getCompanyId()
-                : properties.getCompanyId();
+        // companyId: null → fallback 到 SDK 配置；显式 "" → 不发（跟 createPaymentUrl 保持一致，
+        // 之前这里多判了一次 trim().isEmpty()，导致显式传 "" 也会被 fallback 覆盖掉，
+        // 跟 createPaymentUrl 的行为并不一致——即使注释写着"与 createPaymentUrl 行为一致"。
+        // 该来源不一致已修复：两处现在都只判 != null。
+        String companyId = (request.getCompanyId() != null) ? request.getCompanyId() : properties.getCompanyId();
 
         // 构造签名参数。注意：privateKey 字段绝不进 params（不进签名内容、不进 HTTP body）。
         Map<String, Object> params = new HashMap<>();
@@ -207,6 +211,11 @@ public class OppClient {
         // OPP 通道可空（服务端从 DB 取 orgName）。
         if (request.getCompanyName() != null) {
             params.put("companyName", request.getCompanyName());
+        }
+        // merCode：CALLER_DECLARED 类型的调用方撤单必填（服务端商户级隔离闸，缺了返回 1076），
+        // 普通 opp/billpay 通道服务端忽略这个字段，SDK 侧非空才发，不影响现有调用方。
+        if (request.getMerCode() != null) {
+            params.put("merCode", request.getMerCode());
         }
         if (request.getRevokeReason() != null) {
             params.put("revokeReason", request.getRevokeReason());

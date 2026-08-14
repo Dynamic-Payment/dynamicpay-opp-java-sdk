@@ -38,7 +38,15 @@ public class PaymentRequest {
     /** Server-to-server async payment notification URL. Optional. */
     private String notifyUrl;
 
-    /** Business extension codes, comma-separated. e.g. "installment,discount". Max 256 chars. Optional. */
+    /**
+     * Business extension codes, comma-separated. e.g. "installment,discount". Max 256 chars. Optional.
+     *
+     * The {@code "delegated"} code is a special case: it is reserved for a specific server-registered
+     * caller integration and is <b>not available</b> on the default "opp" channel (server rejects with
+     * code 1074 if you try) — and that same integration is <b>required</b> to send it on every request
+     * (server rejects with code 1078 if missing). See {@link #applyServiceAccessType}. Ordinary
+     * merchant integrations should not use {@code "delegated"}.
+     */
     private String extraTradeCode;
 
     /** Business data corresponding to each extraTradeCode key, in JSON format. Max 1024 chars. Optional.
@@ -59,6 +67,12 @@ public class PaymentRequest {
      *
      * Whitespace around commas is tolerated; duplicate codes are de-duplicated server-side
      * preserving first-seen order. Max 256 characters total.
+     *
+     * For a small number of server-registered caller integrations whose merchant scope is
+     * declared per-request rather than derived from an org binding, exactly one merCode is
+     * required (not the multi-value whitelist form above) — server rejects with code 1075
+     * "exactly one merchantCode is required for this caller" otherwise. This does not apply
+     * to ordinary "opp"/"billpay" integrations.
      */
     private String merchantCode;
 
@@ -105,11 +119,22 @@ public class PaymentRequest {
 
     /**
      * Service access type. Optional.
-     * Allowed values: "opp" (default behavior) / "billpay".
-     * - "opp"     — default OPP channel; server performs permissionOppCode check
-     *               and uses serviceAccess bitmask for merchant permission.
+     *
+     * Determines which public key the server uses to verify the signature, and which merchant
+     * permission check applies:
+     * - "opp"     — default OPP channel (leave this field null/omitted for normal usage); server
+     *               performs permissionOppCode check and uses serviceAccess bitmask for merchant
+     *               permission. <b>The "delegated" extraTradeCode is not available on this channel</b>
+     *               (server rejects with code 1074) — it is reserved for a specific server-registered
+     *               caller integration.
      * - "billpay" — BillPay channel; server skips permissionOppCode check
      *               and uses billpayServiceAccess bitmask for merchant permission.
+     * - Additional values may be registered server-side by DynamicPay operations for specific
+     *   internal integrations (each with its own signing key and merchant-scope rules) — only use
+     *   a value other than "opp"/"billpay" if DynamicPay technical staff told you to, and follow
+     *   their integration-specific requirements (e.g. one such integration requires every request
+     *   to carry {@code extraTradeCode=delegated} with a fully populated matching entry in
+     *   {@code extraTradeContent} — server rejects with code 1078 if it's missing).
      *
      * Normalization timing (important for signature compatibility):
      *   - Server does NOT normalize this field before signature verification — null / empty
@@ -130,7 +155,16 @@ public class PaymentRequest {
      */
     private String companyName;
 
-    private String companyId; // Optional field for backward compatibility. if not present, companyId is always taken from SDK config.
+    /**
+     * Company / merchant ID. Optional field for backward compatibility — if not present,
+     * companyId is always taken from SDK config ({@code opp.company-id}).
+     *
+     * Pass an explicit empty string ({@code ""}) to omit companyId entirely for this call
+     * (bypassing the SDK-config fallback) — needed for server-registered callers that use a
+     * server-side org_id override and must NOT send companyId at all. See {@code OppProperties}
+     * javadoc for when this applies. Leave {@code null} for normal usage.
+     */
+    private String companyId;
 
     /**
      * Optional. Inline RSA private key content (PEM string) used **only for signing this request**.

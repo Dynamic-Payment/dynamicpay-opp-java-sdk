@@ -13,6 +13,10 @@ package com.dynamicpay.opp.sdk.model;
  *   1055 — order not found
  *   1056 — order does not belong to this company
  *   1057 — order not in a revocable state (paid or already dispatched)
+ *   1071 — caller suspended (server-registered caller integrations only)
+ *   1072 — server-side signing key not usable (server configuration issue, not a caller error)
+ *   1073 — companyId conflicts with this caller's configured org scope
+ *   1076 — merCode is required for this caller (see {@link RevokeRequest#getMerCode()})
  *
  * {@code revokeTime} is server-side timestamp at the moment of revoke, useful for
  * merchant reconciliation (do not trust caller's local clock).

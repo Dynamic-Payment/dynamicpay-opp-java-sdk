@@ -24,7 +24,7 @@ Add the JitPack repository and dependency to your `pom.xml`:
     <dependency>
         <groupId>com.github.Dynamic-Payment</groupId>
         <artifactId>dynamicpay-opp-java-sdk</artifactId>
-        <version>1.1.1</version>
+        <version>1.2.0</version>
     </dependency>
 </dependencies>
 ```
@@ -45,7 +45,7 @@ Then add to your project's `pom.xml`:
 <dependency>
     <groupId>com.dynamicpay.opp</groupId>
     <artifactId>dynamicpay-opp-java-sdk</artifactId>
-    <version>1.1.1</version>
+    <version>1.2.0</version>
 </dependency>
 ```
 
@@ -73,6 +73,16 @@ opp:
 The SDK auto-configures itself via Spring Boot — no extra `@Bean` setup needed.
 
 > **⚠ Breaking change in 1.0.2**: When `opp.environment` is omitted, the SDK now defaults to `prod` (previously `sandbox`). If your application relied on the previous `sandbox` default, you must set `opp.environment: sandbox` explicitly to keep using sandbox.
+
+> **New in 1.2.0**: `opp.company-id` is only required by default. A small number of server-registered
+> caller integrations (consult DynamicPay technical staff if this applies to you) use a server-side
+> org_id override and must not configure or send a companyId at all — for those, set
+> `opp.require-company-id: false` to skip the startup check:
+> ```yaml
+> opp:
+>   require-company-id: false   # only if DynamicPay technical staff told you to
+> ```
+> Leave this unset (default `true`) for ordinary merchant integrations.
 
 ---
 
@@ -375,8 +385,9 @@ Safe to retry on network errors.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `orderNum` | String | Yes | Platform-issued order number to revoke. Echoed in the URL path and the body — server cross-checks. |
-| `companyId` | String | No | Defaults to `opp.company-id` from SDK config. Override per-call when the SDK serves multiple merchants. |
-| `applyServiceAccessType` | String | No | `opp` (default) or `billpay`. Determines server-side verification key source. |
+| `companyId` | String | No | Defaults to `opp.company-id` from SDK config. Override per-call when the SDK serves multiple merchants. Pass an explicit empty string `""` to omit companyId entirely for this call (needed for some server-registered caller integrations — see `OppProperties`). |
+| `applyServiceAccessType` | String | No | `opp` (default) or `billpay` for ordinary integrations. Determines server-side verification key source. Additional values may be registered server-side by DynamicPay operations for specific internal integrations — only use one if instructed to. |
+| `merCode` | String | Conditional | Required for a small number of server-registered caller integrations whose merchant scope is declared per-request (server rejects with `code: 1076` if missing). Ignored by the server for ordinary `opp`/`billpay` integrations — leave null. |
 | `companyName` | String | Conditional | Required when `applyServiceAccessType` is `billpay`. Used by the OPP server to locate the billpay signing key. Ignored for the default `opp` channel. |
 | `revokeReason` | String | No | Free-form audit note, max 256 chars. Persisted in `opp_order.revoke_reason`. |
 | `privateKey` | String | No | Inline PEM private key for this call only. Same semantics as `PaymentRequest.privateKey` — useful for multi-merchant signing. Never sent in the HTTP body or signed content. |
@@ -402,6 +413,10 @@ Safe to retry on network errors.
 | `1055` | Order not found |
 | `1056` | Order does not belong to this company |
 | `1057` | Order not in a revocable state (already paid or already dispatched) |
+| `1071` | Caller suspended (server-registered caller integrations only) |
+| `1072` | Server-side signing key not usable — a server configuration issue, not a caller error |
+| `1073` | `companyId` conflicts with this caller's configured org scope |
+| `1076` | `merCode` is required for this caller (see `RevokeRequest.merCode`) |
 
 ### Side Effects
 
@@ -422,13 +437,13 @@ So even if a buyer holds an active JWT, **they cannot complete payment after rev
 | `amount` | long | Yes | Amount in smallest currency unit (cents) |
 | `currency` | String | Yes | ISO 4217 currency code, e.g. `USD` |
 | `paymentType` | String | No | `alipay` / `wechat` / `unionpay` / `vmpay`. Omit to show all options. Mastercard Click to Pay is triggered automatically by merchant configuration — no value needed. |
-| `merchantCode` | String | No | Acquirer merchant code. Single value (`"960105331000001"`) → single-merchant payment page. Comma-separated multi-value (`"960105331000001,960105331000002"`) → multi-merchant payment page restricted to this whitelist; buyer picks one. **All listed codes must be valid** (any invalid code → `code: 1058`). Whitespace around commas tolerated, duplicates de-duplicated. Max 256 chars. Required when `extraTradeCode` is `delegated`. |
+| `merchantCode` | String | No | Acquirer merchant code. Single value (`"960105331000001"`) → single-merchant payment page. Comma-separated multi-value (`"960105331000001,960105331000002"`) → multi-merchant payment page restricted to this whitelist; buyer picks one. **All listed codes must be valid** (any invalid code → `code: 1058`). Whitespace around commas tolerated, duplicates de-duplicated. Max 256 chars. Required when `extraTradeCode` is `delegated`. For a small number of server-registered caller integrations, exactly one value is required instead of the whitelist form (`code: 1075` otherwise) — does not apply to ordinary `opp`/`billpay` integrations. |
 | `description` | String | No | Order description |
 | `notifyUrl` | String | No | Server-to-server async notification URL |
 | `redirectSuccessUrl` | String | No | Browser redirect URL after successful payment (appended to `payUrl` as query parameter) |
 | `redirectErrorUrl` | String | No | Browser redirect URL after failed payment (appended to `payUrl` as query parameter) |
 | `redirectCallerUrl` | String | No | Browser redirect URL when user clicks Back / Cancel (appended to `payUrl` as query parameter) |
-| `extraTradeCode` | String | No | Comma-separated business codes, e.g. `installment`, max 256 chars |
+| `extraTradeCode` | String | No | Comma-separated business codes, e.g. `installment`, max 256 chars. `delegated` is a special case — not available on the default `opp` channel (`code: 1074`), and required on every request for a specific server-registered caller integration (`code: 1078` if missing). Ordinary merchant integrations should not use `delegated`. |
 | `extraTradeContent` | String | No | JSON map matching `extraTradeCode` keys, max 1024 chars |
 | `attach` | String | No | Custom pass-through data, returned as-is in notification callback |
 | `email` | String | No | Cardholder email. Click to Pay only. When provided with `mobile`, skips the identity page. |
@@ -438,12 +453,47 @@ So even if a buyer holds an active JWT, **they cannot complete payment after rev
 | `firstName` | String | No | Cardholder first name. Optional, used to pre-fill name in Click to Pay. Max 100 chars. |
 | `lastName` | String | No | Cardholder last name. Optional, used to pre-fill name in Click to Pay. Max 100 chars. |
 | `isAdditional3DSData` | Integer | No | Enable additional 3DS data on this transaction. `1` = enable, `0` / omit = standard. |
-| `applyServiceAccessType` | String | No | `opp` (default) or `billpay`. Determines server-side verification key source. |
-| `companyId` | String | No | Defaults to `opp.company-id` from SDK config. Override per-call when the SDK serves multiple merchants. |
+| `applyServiceAccessType` | String | No | `opp` (default) or `billpay` for ordinary integrations. Determines server-side verification key source. Additional values may be registered server-side by DynamicPay operations for specific internal integrations — only use one if instructed to. |
+| `companyId` | String | No | Defaults to `opp.company-id` from SDK config. Override per-call when the SDK serves multiple merchants. Pass an explicit empty string `""` to omit companyId entirely for this call (needed for some server-registered caller integrations — see `OppProperties`). |
 | `companyName` | String | Conditional | Required when `applyServiceAccessType` is `billpay`. Used by the OPP server to locate the billpay signing key. Ignored for the default `opp` channel. |
 | `privateKey` | String | No | Inline PEM private key for this call only. Overrides the SDK's configured `opp.private-key-path` — useful when one SDK instance serves multiple merchants with different keys. Never sent in the HTTP body or signed content. |
 
 > **⚠ Breaking change in 1.1.1**: `subMerAmount` was a plain `String` (caller-formatted, max 1024 chars) through 1.1.0. From 1.1.1 it is `List<SubMerItemDTO>` instead — the old string form no longer compiles. If your code called `request.setSubMerAmount("...")`, update it to build a list of `SubMerItemDTO` (see below and Example 5).
+
+### PaymentRequest / createPaymentUrl Error Codes
+
+Errors are thrown as a `RuntimeException` with the server's `message`; check the exception message
+for these codes (or catch and parse if you need the numeric code programmatically):
+
+| Code | Meaning |
+|---|---|
+| `1022` | `companyId` missing |
+| `1023` | Signature verification failed |
+| `1024` | Merchant not authorized / organization not found / no bound merchants |
+| `1030` | Request validation failed (missing/invalid required field) |
+| `1033` | No merchant matches the requested currency |
+| `1036` | `merchantOrderNum` already exists |
+| `1037` | `companyName` is required (billpay / some server-registered caller integrations) |
+| `1041` | Merchant data lookup returned empty |
+| `1042` | No merchant matches the requested `paymentType` + currency |
+| `1050` | Failed to process `extraTradeCode`/`extraTradeContent` (see message for detail) |
+| `1051` | Commission calculation failed |
+| `1058` | Invalid `merchantCode` in the multi-value whitelist |
+| `1059` | Currency not supported |
+| `1060` | Click to Pay merchant missing MCC |
+| `1061` | No Click to Pay configuration available for this currency |
+| `1062` | Multiple Click to Pay merchants selected in one session — not supported |
+| `1071` | Caller suspended (server-registered caller integrations only) |
+| `1072` | Server-side signing key not usable — a server configuration issue, not a caller error |
+| `1073` | `companyId` conflicts with this caller's configured org scope |
+| `1074` | `extraTradeCode` not allowed for this caller (e.g. `delegated` on the default `opp` channel) |
+| `1075` | Exactly one `merchantCode` is required for this caller |
+| `1078` | `extraTradeCode=delegated` is required for this caller and was missing |
+| `1099` | Service still initializing — retry shortly |
+
+Most integrators will only ever see `1058` (invalid `merchantCode`), `1059`/`1033`/`1042` (currency/payment
+method mismatches), and `1036` (duplicate order number). The `107x` codes only apply if you were
+instructed by DynamicPay technical staff to use a non-default `applyServiceAccessType`.
 
 ### SubMerItemDTO Fields
 

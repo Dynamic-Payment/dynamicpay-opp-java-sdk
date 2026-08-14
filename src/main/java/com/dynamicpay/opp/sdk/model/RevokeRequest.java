@@ -18,6 +18,11 @@ public class RevokeRequest {
      * Company / merchant ID. Optional — when omitted the SDK falls back to OppProperties.companyId.
      * Maps to AccesskeyDto.companyId server-side; the order must belong to this company,
      * otherwise the server rejects with code 1056 "Order does not belong to this company".
+     *
+     * Pass an explicit empty string ({@code ""}) to omit companyId entirely for this call
+     * (bypassing the SDK-config fallback) — needed for server-registered callers that use a
+     * server-side org_id override and must NOT send companyId at all. See {@code OppProperties}
+     * javadoc for when this applies. Leave {@code null} for normal usage.
      */
     private String companyId;
 
@@ -37,11 +42,24 @@ public class RevokeRequest {
 
     /**
      * Service access type. Optional.
-     * Allowed values: "opp" (default) / "billpay".
-     * Same semantics as PaymentRequest.applyServiceAccessType — determines which public key
-     * the server uses to verify the signature.
+     *
+     * Determines which public key the server uses to verify the signature. "opp" (default) and
+     * "billpay" are the two channels available to ordinary integrations; additional values may be
+     * registered server-side by DynamicPay operations for specific internal integrations — consult
+     * DynamicPay technical staff if you were told to use a value other than "opp" or "billpay".
      */
     private String applyServiceAccessType;
+
+    /**
+     * Acquirer merchant code. Optional for ordinary integrations ("opp" / "billpay"); <b>REQUIRED</b>
+     * for server-registered callers whose merchant scope is declared per-request rather than derived
+     * from an org binding (server-side: {@code CALLER_DECLARED} scope) — for those, the server cannot
+     * otherwise tell which merchant this order belongs to (its {@code companyId}/org_id is a shared
+     * label across all of that caller's traffic, not merchant-specific), and omitting it returns
+     * code 1076 "merCode is required". Ordinary "opp"/"billpay" integrations can leave this null;
+     * the server ignores it for those channels.
+     */
+    private String merCode;
 
     /**
      * Free-form revoke reason, max 256 characters. Optional.
@@ -73,6 +91,9 @@ public class RevokeRequest {
 
     public String getApplyServiceAccessType() { return applyServiceAccessType; }
     public void setApplyServiceAccessType(String applyServiceAccessType) { this.applyServiceAccessType = applyServiceAccessType; }
+
+    public String getMerCode() { return merCode; }
+    public void setMerCode(String merCode) { this.merCode = merCode; }
 
     public String getRevokeReason() { return revokeReason; }
     public void setRevokeReason(String revokeReason) { this.revokeReason = revokeReason; }
